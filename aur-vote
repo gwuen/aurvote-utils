@@ -9,18 +9,18 @@ import pickle
 import requests
 import sys
 
-LOGIN_URL = "https://aur.archlinux.org/login/"
-PACKAGES_URL = "https://aur.archlinux.org/packages/"
+LOGIN_URL = "https://aur.archlinux.org/login"
+PACKAGES_URL = "https://aur.archlinux.org/packages"
 
-SEARCH_URL_TEMPLATE = "https://aur.archlinux.org/packages/?O=%d&SO=d&PP=250&do_Search=Go&SB=w"
-PACKAGE_URL_TEMPLATE = "https://aur.archlinux.org/packages/%s/"
-VOTE_URL_TEMPLATE = "https://aur.archlinux.org/pkgbase/%s/vote/"
-UNVOTE_URL_TEMPLATE = "https://aur.archlinux.org/pkgbase/%s/unvote/"
+SEARCH_URL_TEMPLATE = "https://aur.archlinux.org/packages?SB=w&SO=d&PP=250&O=%d"
+PACKAGE_URL_TEMPLATE = "https://aur.archlinux.org/packages/%s"
+VOTE_URL_TEMPLATE = "https://aur.archlinux.org/pkgbase/%s/vote"
+UNVOTE_URL_TEMPLATE = "https://aur.archlinux.org/pkgbase/%s/unvote"
 
 DATA_PATH = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share")) + "/aurvote-utils"
 COOKIE_PATH = f"{DATA_PATH}/cookie"
 
-Package = collections.namedtuple("Package", ("name", "version", "votes", "popularity", "voted", "notify", "description", "maintainer"))
+Package = collections.namedtuple("Package", ("name", "version", "votes", "popularity", "voted", "notify", "description", "maintainer", "last_updated"))
 
 class CustomHelpFormatter(argparse.HelpFormatter):
     """ Used to customize multiparameter metavars """
@@ -65,16 +65,13 @@ def login(session, username, password):
         "user": username,
         "passwd": password,
         "remember_me": "on",
-    }))
+        "next": "/",
+    }, headers = {"referer": LOGIN_URL}))
 
     return is_logged_in(soup)
 
 def is_logged_in(soup):
-    return soup.select_one("a[href=\"/logout/\"]") != None
-
-def get_token(session):
-    soup = decode(session.get(PACKAGES_URL))
-    return soup.select_one("input[name=token]")["value"]
+    return soup.select_one("form[action=\"/logout\"]") != None
 
 def get_voted(session):
     """ Get the voted packages
@@ -105,21 +102,20 @@ def get_voted(session):
 
 def get_base(session, pkg):
     soup = decode(session.get(PACKAGE_URL_TEMPLATE % pkg))
-    return soup.select_one("#pkginfo > tr:nth-of-type(2) a").get_text()
+    element = soup.select_one("#pkginfo > tr:nth-of-type(2) a")
+    return element.get_text().strip() if element else None
 
-def vote(session, token, pkg):
-    response = session.post(VOTE_URL_TEMPLATE % get_base(session, pkg), {
-        "token": token, "do_Vote": pkg
-    }, allow_redirects=False)
+def vote(session, pkg):
+    response = session.post(VOTE_URL_TEMPLATE % get_base(session, pkg),
+                            allow_redirects=False)
 
-    return response.status_code == requests.codes.found
+    return response.status_code == requests.codes.see_other
 
-def unvote(session, token, pkg):
-    response = session.post(UNVOTE_URL_TEMPLATE % get_base(session, pkg), {
-        "token": token, "do_UnVote": pkg
-    }, allow_redirects=False)
+def unvote(session, pkg):
+    response = session.post(UNVOTE_URL_TEMPLATE % get_base(session, pkg),
+                            allow_redirects=False)
 
-    return response.status_code == requests.codes.found
+    return response.status_code == requests.codes.see_other
 
 def main():
     parser = argparse.ArgumentParser(usage="%(prog)s [-h | -a | -l | (-v | -u) <pkg>...]", formatter_class=CustomHelpFormatter)
@@ -143,17 +139,13 @@ def main():
                 print(pkg.name)
 
         elif args.vote != None:
-            token = get_token(session)
-
             for pkg in args.vote:
-                if not vote(session, token, pkg):
+                if not vote(session, pkg):
                     print("unable to vote %s" % pkg)
 
         elif args.unvote != None:
-            token = get_token(session)
-
             for pkg in args.unvote:
-                if not unvote(session, token, pkg):
+                if not unvote(session, pkg):
                     print("unable to unvote %s" % pkg)
     else:
         parser.print_help()
