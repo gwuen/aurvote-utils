@@ -9,8 +9,8 @@ A set of utilities for managing AUR votes
 ## aur-vote
 > NOTE: If you have `aurutils` installed, `aur vote` may be used instead.
 
-If necessary, `aur-vote` will prompt for authentication. Cookies are saved in `$XDG_DATA_HOME/aurvote-utils/cookie`
-and are renewed automatically. Alternatively, you may regenerate the cookie manually:
+If necessary, `aur-vote` will prompt for authentication. Cookies are saved in `$XDG_STATE_HOME/aurvote-utils/cookie`
+(by default ~/.local/state/...) and are renewed automatically. Alternatively, you may regenerate the cookie manually:
 
 ```
 $ aur-vote -a
